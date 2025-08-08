@@ -89,6 +89,7 @@ class SmartAudio(commands.Cog):
         player = self.get_player(guild)
         vc = guild.voice_client
         if not vc:
+            await ctx.send(f"Debug: Not connected, attempting to join {channel.name}")
             return
         source = discord.FFmpegPCMAudio(track.url)
         vol = await self.config.guild(guild).volume()
@@ -115,6 +116,9 @@ class SmartAudio(commands.Cog):
 
     @commands.command()
     async def play(self, ctx, *, query):
+        """Play a URL or search YouTube for keywords and select."""
+        # Debug message for command invocation
+        await ctx.send(f"Debug: Play command invoked with query: {query}")(self, ctx, *, query):
         """Play a URL or search YouTube for keywords and select."""
         log.debug(f"Play command invoked by {ctx.author} with query: {query}")
         # Ensure author is in a voice channel
@@ -148,6 +152,8 @@ class SmartAudio(commands.Cog):
                 await ctx.send(f"Now playing: [{track.title}]({track.url})")
             return
         # Search and reaction selection
+        # Debug before search
+        await ctx.send(f"Debug: Searching YouTube for '{query}'...")
         entries = await self._search(query)
         if not entries:
             return await ctx.send("No results found.")
