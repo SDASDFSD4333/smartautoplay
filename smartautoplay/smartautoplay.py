@@ -1,6 +1,10 @@
+import logging
 import yt_dlp
 from redbot.core import commands, Config
 from redbot.core.bot import Red
+
+log = logging.getLogger("red.smartautoplay")
+log.setLevel(logging.DEBUG)  # Show debug and above messages
 
 class SmartAutoplay(commands.Cog):
     """Smart Autoplay – Plays related tracks like YouTube's Mix"""
@@ -17,7 +21,7 @@ class SmartAutoplay(commands.Cog):
     async def on_red_ready(self):
         self.audio_cog = self.bot.get_cog("Audio")
         if not self.audio_cog:
-            print("Audio cog not found!")
+            log.error("Audio cog not found!")
 
     @commands.Cog.listener()
     async def on_track_end(self, guild, track, track_error=None):
@@ -25,19 +29,19 @@ class SmartAutoplay(commands.Cog):
         if not await self.config.guild(guild).autoplay_enabled():
             return
 
-        print(f"Track object: {track}")
-        print(f"Track info: {getattr(track, 'info', None)}")
+        log.debug(f"Track object: {track}")
+        log.debug(f"Track info: {getattr(track, 'info', None)}")
 
         track_url = getattr(track, "url", None) or (getattr(track, "info", {}) or {}).get("url")
         if not track_url:
-            print(f"[SmartAutoplay] Could not determine track URL for track: {track}")
+            log.error(f"[SmartAutoplay] Could not determine track URL for track: {track}")
             return
 
         related_url = await self._get_related_track(track_url)
         if related_url:
             vc = self.audio_cog._get_player(guild)
             if not vc:
-                print("[SmartAutoplay] No audio player found for guild.")
+                log.error("[SmartAutoplay] No audio player found for guild.")
                 return
             await vc.queue_url(related_url, guild=guild)
         else:
@@ -69,16 +73,16 @@ class SmartAutoplay(commands.Cog):
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
-                print(f"[SmartAutoplay] Fetching related for: {url}")
+                log.info(f"[SmartAutoplay] Fetching related for: {url}")
                 info = ydl.extract_info(url, download=False)
-                print(f"[SmartAutoplay] Fetched info keys: {list(info.keys())}")
+                log.debug(f"[SmartAutoplay] Fetched info keys: {list(info.keys())}")
                 related = info.get("related_videos", [])
-                print(f"[SmartAutoplay] Found {len(related)} related videos")
+                log.info(f"[SmartAutoplay] Found {len(related)} related videos")
                 for rel in related:
                     video_id = rel.get("id")
                     if video_id:
                         return f"https://www.youtube.com/watch?v={video_id}"
-                print("[SmartAutoplay] No usable related videos found.")
+                log.warning("[SmartAutoplay] No usable related videos found.")
             except Exception as e:
-                print(f"[SmartAutoplay Error] {e}")
+                log.error(f"[SmartAutoplay Error] {e}")
         return None
