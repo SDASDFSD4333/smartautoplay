@@ -267,18 +267,12 @@ class SmartAudio(commands.Cog):
         ]
         desc = "
 ".join(lines)
-        await ctx.send(embed=discord.Embed(title=f"Playlist: {name}", description=desc))("No such playlist.")
-        pl = pls[name]
-        if not pl:
-            return await ctx.send("Playlist is empty.")
-        lines = [
-            f"{i+1}. [{t['title']}]({t['url']}) ({humanize_timedelta(timedelta(seconds=t['duration']))})"
-            for i, t in enumerate(pl)
-        ]
-        await ctx.send(embed=discord.Embed(title=f"Playlist: {name}", description="
-".join(lines)))
+        embed = discord.Embed(title=f"Playlist: {name}", description=desc, color=discord.Color.blurple())
+        msg = await ctx.send(embed=embed)
+        for emoji in ["⬅️", "➡️", "🗑️"]:
+            await msg.add_reaction(emoji)
 
-    @playlist.command()
+    @playlist.command()()
     async def play(self, ctx, name: str):
         pls = await self.config.guild(ctx.guild).playlists()
         if name not in pls:
