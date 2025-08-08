@@ -17,6 +17,24 @@ class Track:
         self.added_by = added_by
 
 class SmartAudio(commands.Cog):
+    """Smart Audio – Delegates to Redbot's Audio cog for playback, adding search, playlists, and autoplay."""
+
+    def __init__(self, bot):
+        self.bot = bot
+        self.config = Config.get_conf(self, identifier=123456789)
+        self.config.register_guild(
+            queue=[], autoplay=True, repeat=False, repeat_one=False,
+            shuffle=False, volume=0.5, playlists={}
+        )
+        self.players = {}
+        self.audio_cog = None
+        self.bot.loop.create_task(self._set_audio_cog())
+
+    async def _set_audio_cog(self):
+        await self.bot.wait_until_red_ready()
+        self.audio_cog = self.bot.get_cog('Audio')
+        if not self.audio_cog:
+            log.error('Audio cog not found; SmartAudio will not function.')
     """Smart Audio – YouTube autoplay, search, playlists, and reaction controls."""
 
     def __init__(self, bot):
