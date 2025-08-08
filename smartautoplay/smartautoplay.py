@@ -47,14 +47,19 @@ class SmartAudio(commands.Cog):
             self.players[guild.id] = player
         return player
 
-    async def _idle_loop(self):(self, url):
-        ydl_opts = {'format': 'bestaudio/best', 'quiet': True}
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                return ydl.extract_info(url, download=False)
-            except Exception as e:
-                log.warning(f"yt-dlp error: {e}")
-                return None
+        async def _idle_loop(self):
+        """Background task: disconnect when alone for >2 minutes."""
+        await self.bot.wait_until_red_ready()
+        while True:
+            for guild in self.bot.guilds:
+                vc = guild.voice_client
+                if vc and vc.is_connected() and len(vc.channel.members) <= 1:
+                    player = self.get_player(guild)
+                    idle = self.bot.loop.time() - player['last_active']
+                    if idle > 120:
+                        await vc.disconnect()
+                        log.info(f"Disconnected from {guild.name} due to inactivity.")
+            await asyncio.sleep(30)
 
     async def _search(self, query, limit=6):
         opts = {'quiet': True, 'extract_flat': True, 'skip_download': True}
