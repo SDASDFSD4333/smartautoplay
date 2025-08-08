@@ -265,6 +265,16 @@ class SmartAudio(commands.Cog):
             f"{i+1}. [{t['title']}]({t['url']}) ({humanize_timedelta(timedelta(seconds=t['duration']))})"
             for i, t in enumerate(pl)
         ]
+        desc = "
+".join(lines)
+        await ctx.send(embed=discord.Embed(title=f"Playlist: {name}", description=desc))("No such playlist.")
+        pl = pls[name]
+        if not pl:
+            return await ctx.send("Playlist is empty.")
+        lines = [
+            f"{i+1}. [{t['title']}]({t['url']}) ({humanize_timedelta(timedelta(seconds=t['duration']))})"
+            for i, t in enumerate(pl)
+        ]
         await ctx.send(embed=discord.Embed(title=f"Playlist: {name}", description="
 ".join(lines)))
 
