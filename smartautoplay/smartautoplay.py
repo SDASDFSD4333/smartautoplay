@@ -1,4 +1,16 @@
 import discord
+import os
+# Ensure Opus library is loaded for voice encryption
+if not discord.opus.is_loaded():
+    for lib in ('libopus.so.0', 'libopus.so', 'opus.dll'):
+        try:
+            discord.opus.load_opus(lib)
+            print(f"Loaded Opus library: {lib}")
+            break
+        except Exception:
+            continue
+    else:
+        print("[SmartAudio Error] Could not load Opus library; install libopus.")
 import yt_dlp
 import asyncio
 import logging
