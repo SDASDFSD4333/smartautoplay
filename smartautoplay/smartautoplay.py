@@ -1,16 +1,4 @@
 import discord
-import os
-# Ensure Opus library is loaded for voice encryption
-if not discord.opus.is_loaded():
-    for lib in ('libopus.so.0', 'libopus.so', 'opus.dll'):
-        try:
-            discord.opus.load_opus(lib)
-            print(f"Loaded Opus library: {lib}")
-            break
-        except Exception:
-            continue
-    else:
-        print("[SmartAudio Error] Could not load Opus library; install libopus.")
 import yt_dlp
 import asyncio
 import logging
@@ -18,6 +6,10 @@ import random
 from datetime import timedelta
 from redbot.core import commands, Config
 from redbot.core.utils.chat_formatting import humanize_timedelta, box
+
+# Ensure Opus is loaded
+if not discord.opus.is_loaded():
+    discord.opus.load_opus('libopus.so.0')
 
 log = logging.getLogger("red.smartaudio")
 
@@ -29,37 +21,28 @@ class Track:
         self.added_by = added_by
 
 class SmartAudio(commands.Cog):
-    """SmartAudio – autonomous playback with search, playlists, and autoplay."""
+    """SmartAudio – autonomous playback with search, queue, playlists, and autoplay."""
 
     def __init__(self, bot):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=123456789)
         self.config.register_guild(
-            queue=[], autoplay=True, repeat=False, repeat_one=False,
-            shuffle=False, volume=0.5, playlists={}
+            autoplay=True, repeat=False, repeat_one=False, shuffle=False, volume=0.5, playlists={}, queue=[]
         )
         self.players = {}
-        # Start idle disconnect loop
-        self._idle_task = self.bot.loop.create_task(self._idle_loop())
+        self.idle_task = self.bot.loop.create_task(self._idle_loop())
 
     def cog_unload(self):
-        try:
-            self._idle_task.cancel()
-        except Exception:
-            pass
+        self.idle_task.cancel()
 
     def get_player(self, guild):
         player = self.players.get(guild.id)
         if not player:
-            player = {
-                'vc': None, 'queue': [], 'current': None,
-                'paused': False, 'last_active': self.bot.loop.time()
-            }
+            player = {'vc': None, 'queue': [], 'current': None, 'last_active': self.bot.loop.time()}
             self.players[guild.id] = player
         return player
 
     async def _idle_loop(self):
-        """Disconnect when alone for >5 minutes."""
         await self.bot.wait_until_red_ready()
         while True:
             for guild in self.bot.guilds:
@@ -74,37 +57,36 @@ class SmartAudio(commands.Cog):
     def _search_blocking(self, query, limit=6):
         opts = {'quiet': True, 'extract_flat': True, 'skip_download': True}
         with yt_dlp.YoutubeDL(opts) as ydl:
-            try:
-                info = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
-                return info.get('entries', [])
-            except Exception as e:
-                log.error(f"yt-dlp search error: {e}")
-                return []
+            info = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
+            return info.get('entries', []) or []
 
     def _get_info_blocking(self, url):
-        ydl_opts = {'format': 'bestaudio/best', 'quiet': True}
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                return ydl.extract_info(url, download=False)
-            except Exception as e:
-                log.error(f"yt-dlp info error: {e}")
-                return None
+        opts = {'format': 'bestaudio/best', 'quiet': True}
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            return ydl.extract_info(url, download=False)
 
     @commands.command()
     async def play(self, ctx, *, query):
         """Play a URL or search YouTube for keywords and select."""
         if not ctx.author.voice or not ctx.author.voice.channel:
             return await ctx.send("You need to be in a voice channel.")
-        vc = ctx.guild.voice_client or await ctx.author.voice.channel.connect()
+        channel = ctx.author.voice.channel
+        vc = ctx.guild.voice_client
+        if not vc:
+            try:
+                vc = await channel.connect()
+            except discord.errors.ConnectionClosed as e:
+                log.error(f"Voice handshake failed: {e}")
+                return await ctx.send(
+                    "🔌 Voice handshake failed (4006). "
+                    "Ensure PyNaCl, libopus, and network access to Discord voice servers are correct."
+                )
         player = self.get_player(ctx.guild)
-        # URL playback
         if query.startswith('http'):
             info = await asyncio.to_thread(self._get_info_blocking, query)
-            if not info:
-                return await ctx.send("Could not load video.")
-            track = Track(query, info.get('title'), info.get('duration',0), ctx.author.id)
+            track = Track(query, info.get('title'), info.get('duration', 0), ctx.author.id)
         else:
-            entries = await asyncio.to_thread(self._search_blocking, query, 6)
+            entries = await asyncio.to_thread(self._search_blocking, query)
             if not entries:
                 return await ctx.send("No results found.")
             desc = "\n".join(
@@ -121,17 +103,14 @@ class SmartAudio(commands.Cog):
                 sel = entries[emojis.index(str(r.emoji))]
                 url = sel.get('url') or f"https://youtu.be/{sel['id']}"
                 info = await asyncio.to_thread(self._get_info_blocking, url)
-                track = Track(url, info.get('title'), info.get('duration',0), ctx.author.id)
+                track = Track(url, info.get('title'), info.get('duration', 0), ctx.author.id)
             except asyncio.TimeoutError:
                 return await ctx.send("Selection timed out.")
-        # enqueue or play
         if vc.is_playing():
             player['queue'].append(track)
             return await ctx.send(f"Queued: [{track.title}]({track.url})")
-        # play immediately
         source = discord.FFmpegPCMAudio(track.url)
-        vol = await self.config.guild(ctx.guild).volume()
-        vc.source = discord.PCMVolumeTransformer(source, volume=vol)
+        vc.source = discord.PCMVolumeTransformer(source, volume=await self.config.guild(ctx.guild).volume())
         vc.play(vc.source, after=lambda e: asyncio.create_task(self._after(ctx.guild)))
         player['current'] = track
         player['last_active'] = self.bot.loop.time()
@@ -143,8 +122,7 @@ class SmartAudio(commands.Cog):
         rep = await self.config.guild(guild).repeat()
         one = await self.config.guild(guild).repeat_one()
         if one and player['current']:
-            await self._play(guild, player['current'])
-            return
+            return await self._play(guild, player['current'])
         if rep and player['current']:
             queue.append(player['current'])
         if queue:
@@ -202,60 +180,16 @@ class SmartAudio(commands.Cog):
         await ctx.send("Queue shuffled.")
 
     @commands.command()
-    async def savequeue(self, ctx):
-        player = self.get_player(ctx.guild)
-        data = [vars(t) for t in player['queue']]
-        await self.config.guild(ctx.guild).queue.set(data)
-        await ctx.send("Queue saved.")
-
-    @commands.command()
-    async def loadqueue(self, ctx):
-        raw = await self.config.guild(ctx.guild).queue()
-        player = self.get_player(ctx.guild)
-        player['queue'] = [Track(d['url'], d['title'], d['duration'], d.get('added_by')) for d in raw]
-        await ctx.send(f"Loaded {len(player['queue'])} tracks.")
-
-    @commands.group(invoke_without_command=True)
-    async def playlist(self, ctx):
-        "Manage playlists. Use subcommands."
-        await ctx.send_help('playlist')
-
-    @playlist.command()
-    async def create(self, ctx, name: str):
-        pls = await self.config.guild(ctx.guild).playlists()
-        if name in pls:
-            return await ctx.send("Playlist already exists.")
-        pls[name] = []
-        await self.config.guild(ctx.guild).playlists.set(pls)
-        await ctx.send(f"Created playlist `{name}`.")
-
-    @playlist.command()
-    async def add(self, ctx, name: str, url: str):
-        pls = await self.config.guild(ctx.guild).playlists()
-        if name not in pls:
-            return await ctx.send("No such playlist.")
-        info = await asyncio.to_thread(self._get_info_blocking, url)
-        if not info:
-            return await ctx.send("Could not fetch video info.")
-        entry = {'url': url, 'title': info['title'], 'duration': info.get('duration', 0)}
-        pls[name].append(entry)
-        await self.config.guild(ctx.guild).playlists.set(pls)
-        await ctx.send(f"Added to `{name}`: {entry['title']}")
-
-    @playlist.command()
-    async def show(self, ctx, name: str):
-        pls = await self.config.guild(ctx.guild).playlists()
-        if name not in pls:
-            return await ctx.send("No such playlist.")
-        pl = pls[name]
-        if not pl:
-            return await ctx.send("Playlist is empty.")
-        lines = [
-            f"{i+1}. [{t['title']}]({t['url']}) ({humanize_timedelta(timedelta(seconds=t['duration']))})"
-            for i, t in enumerate(pl)
-        ]
-        desc = "\n".join(lines)
-        await ctx.send(embed=discord.Embed(title=f"Playlist: {name}", description=desc, color=discord.Color.blurple()))
+    async def audioguide(self, ctx):
+        guide = (
+            "**SmartAudio Guide**\n"
+            "!play <url|keywords> — search & queue via YouTube\n"
+            "!pause/resume/stop — playback control\n"
+            "!loop/repeatall — repeat settings\n"
+            "!shuffle — shuffle queue\n"
+            """Queue commands: "Get queue and reaction controls sel..."""
+        )
+        await ctx.send(box(guide, lang="ini"))
 
 async def setup(bot):
     await bot.add_cog(SmartAudio(bot))
