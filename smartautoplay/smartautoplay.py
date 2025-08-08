@@ -27,16 +27,25 @@ class SmartAudio(commands.Cog):
             shuffle=False, volume=0.5, playlists={}
         )
         self.players = {}
+        # Start idle disconnect loop
         self._idle_task = self.bot.loop.create_task(self._idle_loop())
 
     def cog_unload(self):
-        self._idle_task.cancel()
+        try:
+            self._idle_task.cancel()
+        except Exception:
+            pass
 
     def get_player(self, guild):
         player = self.players.get(guild.id)
         if not player:
-            player = {'vc': None, 'queue': [], 'current': None,
-                      'paused': False, 'last_active': self.bot.loop.time()}
+            player = {
+                'vc': None,
+                'queue': [],
+                'current': None,
+                'paused': False,
+                'last_active': self.bot.loop.time()
+            }
             self.players[guild.id] = player
         return player
 
@@ -76,20 +85,21 @@ class SmartAudio(commands.Cog):
     @commands.command()
     async def play(self, ctx, *, query):
         """Play a URL or search YouTube for keywords and select."""
-        # Check voice channel
+        # Ensure user is in a voice channel
         if not ctx.author.voice or not ctx.author.voice.channel:
             return await ctx.send("You need to be in a voice channel to use this command.")
         channel = ctx.author.voice.channel
         vc = ctx.guild.voice_client
+        # Connect if not already
         if not vc:
             try:
                 vc = await channel.connect()
-                await ctx.send(f"Connected to: {channel.name}")
+                await ctx.send(f"Connected to voice channel: {channel.name}")
             except Exception as e:
                 log.error(f"Failed to connect to voice channel: {e}")
                 return await ctx.send(f"Could not connect: {e}")
         player = self.get_player(ctx.guild)
-        # Direct URL
+        # Direct URL playback
         if query.startswith('http'):
             info = await self._get_info(query)
             if not info:
@@ -102,23 +112,29 @@ class SmartAudio(commands.Cog):
                 await self._play(ctx.guild, track)
                 await ctx.send(f"Now playing: [{track.title}]({track.url})")
             return
-        # Keyword search
+        # Keyword search flow
         results = await self._search(query)
         if not results:
             return await ctx.send("No results found.")
+        # Build and display search results
         desc = "\n".join(
             f"{i+1}. [{e['title']}]({e.get('url') or f'https://youtu.be/{e['id']}'} )"
             for i, e in enumerate(results)
         )
-        embed = discord.Embed(title="Search Results", description=desc, color=discord.Color.blurple())
+        embed = discord.Embed(
+            title="Search Results",
+            description=desc,
+            color=discord.Color.blurple()
+        )
         msg = await ctx.send(embed=embed)
-        choices = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣']
-        for emj in choices:
+        emojis = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣']
+        for emj in emojis:
             await msg.add_reaction(emj)
-        def check(r, u): return u == ctx.author and r.message.id == msg.id and str(r.emoji) in choices
+        def check(r, u):
+            return u == ctx.author and r.message.id == msg.id and str(r.emoji) in emojis
         try:
             reaction, _ = await self.bot.wait_for('reaction_add', check=check, timeout=30)
-            idx = choices.index(str(reaction.emoji))
+            idx = emojis.index(str(reaction.emoji))
             sel = results[idx]
             url = sel.get('url') or f"https://youtu.be/{sel['id']}"
             info = await self._get_info(url)
