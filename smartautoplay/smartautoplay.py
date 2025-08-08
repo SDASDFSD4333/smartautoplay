@@ -29,7 +29,7 @@ class SmartAutoplay(commands.Cog):
             return
 
         title = track.title
-        related_url = await self._get_related_track(title)
+        related_url = await self._get_related_track(track.url)
         if related_url:
             vc = self.audio_cog._get_player(guild)
             await vc.queue_url(related_url, guild=guild)
@@ -51,15 +51,25 @@ class SmartAutoplay(commands.Cog):
         await self.config.guild(ctx.guild).autoplay_enabled.set(False)
         await ctx.send("Autoplay disabled.")
 
-    async def _get_related_track(self, query):
-        """Use yt-dlp to grab a related video"""
-        ydl_opts = {
-            "quiet": True,
-            "extract_flat": "in_playlist",
-            "skip_download": True,
-            "default_search": "ytsearch10",
-            "forcejson": True,
-        }
+async def _get_related_track(self, url):
+    ydl_opts = {
+        "quiet": True,
+        "extract_flat": True,
+        "skip_download": True,
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            info = ydl.extract_info(url, download=False)
+            if "related_videos" in info:
+                for rel in info["related_videos"]:
+                    video_id = rel.get("id")
+                    if video_id:
+                        return f"https://www.youtube.com/watch?v={video_id}"
+        except Exception as e:
+            print(f"[SmartAutoplay Error] {e}")
+            return None
+
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
