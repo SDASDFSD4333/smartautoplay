@@ -132,7 +132,7 @@ class SmartAudio(commands.Cog):
         entries = await self._search(query)
         if not entries:
             return await ctx.send("No results found.")
-        # Build a newline-joined list of results
+                # Build a newline-joined list of results
         desc = "
 ".join(
             f"{i+1}. [{e['title']}]({e.get('url') or 'https://youtu.be/'+e['id']})"
@@ -163,6 +163,7 @@ class SmartAudio(commands.Cog):
                 await self._play(ctx.guild, track)
                 await ctx.send(f"Now playing: [{track.title}]({track.url})")
         except asyncio.TimeoutError:
+            return await ctx.send("Selection timed out.")
             return await ctx.send("Selection timed out.")
 
     @commands.command()
