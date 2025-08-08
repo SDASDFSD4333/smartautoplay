@@ -130,12 +130,13 @@ class SmartAudio(commands.Cog):
                 await ctx.send(f"Now playing: [{track.title}]({track.url})")
             return
         entries = await self._search(query)
-        if not entries:
+                if not entries:
             return await ctx.send("No results found.")
-                # Build a newline-joined list of results
+
+        # Build a newline-joined list of results
         desc = "
 ".join(
-            f"{i+1}. [{e['title']}]({e.get('url') or 'https://youtu.be/'+e['id']})"
+            f"{i+1}. [{e['title']}]({e.get('url') or 'https://youtu.be/'+e['id']})"  
             for i, e in enumerate(entries)
         )
         embed = discord.Embed(
@@ -147,8 +148,10 @@ class SmartAudio(commands.Cog):
         emojis = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣']
         for emj in emojis:
             await msg.add_reaction(emj)
+
         def check(r, u):
             return u == ctx.author and r.message.id == msg.id and str(r.emoji) in emojis
+
         try:
             r, _ = await self.bot.wait_for('reaction_add', check=check, timeout=30)
             idx = emojis.index(str(r.emoji))
