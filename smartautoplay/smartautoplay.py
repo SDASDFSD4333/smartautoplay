@@ -113,9 +113,20 @@ class SmartAudio(commands.Cog):
     @commands.command()
     async def play(self, ctx, *, query):
         """Play a URL or search YouTube for keywords and select."""
-        vc = ctx.guild.voice_client or (await ctx.author.voice.channel.connect() if ctx.author.voice else None)
+        # Ensure author is in a voice channel
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send("You need to be in a voice channel to use this command.")
+            return
+        channel = ctx.author.voice.channel
+        vc = ctx.guild.voice_client
         if not vc:
-            return await ctx.send("Join a voice channel first.")
+            log.debug(f"Connecting to voice channel: {channel}")
+            try:
+                vc = await channel.connect()
+            except Exception as e:
+                log.error(f"Failed to connect to voice channel: {e}")
+                await ctx.send("Couldn't connect to the voice channel.")
+                return
         player = self.get_player(ctx.guild)
         # Direct URL play
         if query.startswith('http'):
