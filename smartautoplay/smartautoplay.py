@@ -85,12 +85,10 @@ class SmartAudio(commands.Cog):
     @commands.command()
     async def play(self, ctx, *, query):
         """Play a URL or search YouTube for keywords and select."""
-        # Ensure user is in a voice channel
         if not ctx.author.voice or not ctx.author.voice.channel:
             return await ctx.send("You need to be in a voice channel to use this command.")
         channel = ctx.author.voice.channel
         vc = ctx.guild.voice_client
-        # Connect if not already
         if not vc:
             try:
                 vc = await channel.connect()
@@ -118,7 +116,7 @@ class SmartAudio(commands.Cog):
             return await ctx.send("No results found.")
         # Build and display search results
         desc = "\n".join(
-            f"{i+1}. [{e['title']}]({e.get('url') or f'https://youtu.be/{e['id']}'} )"
+            f"{i+1}. [{e['title']}]({e.get('url') or 'https://youtu.be/' + e['id']})"
             for i, e in enumerate(results)
         )
         embed = discord.Embed(
