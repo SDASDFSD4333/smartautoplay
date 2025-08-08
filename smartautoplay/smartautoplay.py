@@ -68,36 +68,16 @@ class SmartAudio(commands.Cog):
             try:
                 return ydl.extract_info(url, download=False)
             except Exception as e:
-                log.warning(f"yt-dlp error: {e}")
-                return None
-
-    async def _search(self, query, limit=6):
-        opts = {'quiet': True, 'extract_flat': True, 'skip_download': True}
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            try:
-                info = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
-                return info.get('entries', [])
-            except Exception as e:
-                log.warning(f"search error: {e}")
-                return []
-
-    @commands.command()
-    async def play(self, ctx, *, query):
-        """Play a URL or search YouTube for keywords and select."""
-        # Debug invocation
-        await ctx.send(f"Debug: Play command invoked with query: {query}")
-        # Ensure user is in voice channel
-        if not ctx.author.voice or not ctx.author.voice.channel:
-            return await ctx.send("You need to be in a voice channel to use this command.")
-        channel = ctx.author.voice.channel
-        vc = ctx.guild.voice_client
-        if not vc:
-            try:
-                vc = await channel.connect()
-                await ctx.send("Debug: Connected to the voice channel.")
-            except Exception as e:
-                log.error(f"Failed to connect: {e}")
-                return await ctx.send("Couldn't connect to the voice channel.")
+                err = str(e)
+                log.error(f"Failed to connect: {err}")
+                if "PyNaCl" in err or "pynacl" in err.lower():
+                    await ctx.send(
+                        "Voice functionality requires the PyNaCl library. "
+                        "Please install it in your Docker container (e.g., `pip install PyNaCl`) and restart RedBot."
+                    )
+                else:
+                    await ctx.send(f"Couldn't connect to the voice channel: {err}")
+                return(f"Couldn't connect to the voice channel: {e}")
         player = self.get_player(ctx.guild)
         # URL playback
         if query.startswith('http'):
