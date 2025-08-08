@@ -35,6 +35,28 @@ class SmartAudio(commands.Cog):
         if not self.audio_cog:
             log.error('Audio cog not found; SmartAudio will not function.')
 
+    # Blocking helpers for search and info
+    def _search_blocking(self, query, limit=6):
+        opts = {'quiet': True, 'extract_flat': True, 'skip_download': True}
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            try:
+                info = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
+                return info.get('entries', [])
+            except Exception as e:
+                log.error(f"yt-dlp error searching: {e}")
+                return []
+
+    def _get_info_blocking(self, url):
+        ydl_opts = {'format': 'bestaudio/best', 'quiet': True}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                return ydl.extract_info(url, download=False)
+            except Exception as e:
+                log.error(f"yt-dlp error fetching info: {e}")
+                return None
+
+            log.error('Audio cog not found; SmartAudio will not function.')
+
     @commands.command(name="saplay", aliases=["splay"])
     async def saplay(self, ctx, *, query):
         """SmartAudio play command (avoids core Audio play conflict)."""
