@@ -50,20 +50,25 @@ class SmartAudio(commands.Cog):
         return player
 
     async def _idle_loop(self):
-        """Background task: disconnect when alone for >2 minutes."""
+        """Disconnect when alone for >5 minutes."""
         await self.bot.wait_until_red_ready()
         while True:
             for guild in self.bot.guilds:
                 vc = guild.voice_client
-                if vc and vc.is_connected() and len(vc.channel.members) <= 1:
-                    player = self.get_player(guild)
-                    idle = self.bot.loop.time() - player['last_active']
-                    if idle > 120:
-                        await vc.disconnect()
-                        log.info(f"Disconnected from {guild.name} due to inactivity.")
-            await asyncio.sleep(30)
+                if vc and vc.is_connected():
+                    if len(vc.channel.members) <= 1:
+                        player = self.get_player(guild)
+                        idle = self.bot.loop.time() - player['last_active']
+                        if idle > 300:
+                            await vc.disconnect()
+                            log.info(f"Disconnected from {guild.name} due to inactivity.")
+            await asyncio.sleep(60)
 
     async def _get_info(self, url):
+        """Fetch video info in thread to avoid blocking."""
+        return await asyncio.to_thread(self._get_info_blocking, url)
+
+    def _get_info_blocking(self, url):
         ydl_opts = {'format': 'bestaudio/best', 'quiet': True}
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
@@ -73,6 +78,10 @@ class SmartAudio(commands.Cog):
                 return None
 
     async def _search(self, query, limit=6):
+        """Search YouTube entries in thread to avoid blocking."""
+        return await asyncio.to_thread(self._search_blocking, query, limit)
+
+    def _search_blocking(self, query, limit=6):
         opts = {'quiet': True, 'extract_flat': True, 'skip_download': True}
         with yt_dlp.YoutubeDL(opts) as ydl:
             try:
