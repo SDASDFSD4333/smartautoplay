@@ -37,16 +37,16 @@ class SmartAutoplay(commands.Cog):
             await guild.system_channel.send("Couldn't find a related track!")
 
     @commands.group()
-    async def autoplay(self, ctx):
+    async def smartplay(self, ctx):
         """Toggle autoplay settings."""
         pass
 
-    @autoplay.command()
+    @smartplay.command()
     async def on(self, ctx):
         await self.config.guild(ctx.guild).autoplay_enabled.set(True)
         await ctx.send("Autoplay enabled.")
 
-    @autoplay.command()
+    @smartplay.command()
     async def off(self, ctx):
         await self.config.guild(ctx.guild).autoplay_enabled.set(False)
         await ctx.send("Autoplay disabled.")
