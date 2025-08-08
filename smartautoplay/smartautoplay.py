@@ -73,6 +73,9 @@ class SmartAudio(commands.Cog):
                 return None
 
     async def _search(self, query, limit=6):
+        """Search YouTube using yt-dlp."""
+        log.debug(f"Searching YouTube for: {query} (limit {limit})")
+        opts = {'quiet': True, 'extract_flat': True, 'skip_download': True}
         opts = {'quiet': True, 'extract_flat': True, 'skip_download': True}
         with yt_dlp.YoutubeDL(opts) as ydl:
             try:
@@ -112,6 +115,9 @@ class SmartAudio(commands.Cog):
 
     @commands.command()
     async def play(self, ctx, *, query):
+        """Play a URL or search YouTube for keywords and select."""
+        log.debug(f"Play command invoked by {ctx.author} with query: {query}")
+        # Ensure author is in a voice channel
         """Play a URL or search YouTube for keywords and select."""
         # Ensure author is in a voice channel
         if not ctx.author.voice or not ctx.author.voice.channel:
