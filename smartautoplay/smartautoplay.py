@@ -20,7 +20,7 @@ class Track:
 class SmartAudio(commands.Cog):
     """Smart Audio – YouTube autoplay, search, playlists, and reaction controls."""
 
-        def __init__(self, bot):
+    def __init__(self, bot):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=123456789)
         self.config.register_guild(
@@ -31,13 +31,11 @@ class SmartAudio(commands.Cog):
         # start idle disconnect loop
         self._idle_task = self.bot.loop.create_task(self._idle_loop())
 
-
-        def cog_unload(self):
+    def cog_unload(self):
         try:
             self._idle_task.cancel()
         except Exception:
             pass
-
 
     def get_player(self, guild):
         player = self.players.get(guild.id)
@@ -47,10 +45,7 @@ class SmartAudio(commands.Cog):
                 'paused': False, 'last_active': self.bot.loop.time()
             }
             self.players[guild.id] = player
-        return player
-
-    
-        async def _idle_loop(self):
+        return player    async def _idle_loop(self):(self):
         await self.bot.wait_until_red_ready()
         while True:
             for guild in self.bot.guilds:
