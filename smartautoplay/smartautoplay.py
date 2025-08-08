@@ -125,6 +125,7 @@ class SmartAudio(commands.Cog):
             if not entries: return await ctx.send("No results.")
             desc = "
 ".join(
-    f"{i+1}. [{entry['title']}]({entry.get('url') or f'https://youtu.be/{entry[\"id\"]}'} )"
+    f"{i+1}. [{entry['title']}]({entry.get('url') or 'https://youtu.be/'+entry['id']})"
     for i, entry in enumerate(entries)
+)
 )
