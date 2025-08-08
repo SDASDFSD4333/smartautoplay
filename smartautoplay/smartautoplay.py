@@ -38,8 +38,12 @@ class SmartAudio(commands.Cog):
     @commands.command(name="saplay", aliases=["splay"])
     async def saplay(self, ctx, *, query):
         """SmartAudio play command (avoids core Audio play conflict)."""
+        # Ensure core Audio cog is loaded
         if not self.audio_cog:
-            return await ctx.send("⚠️ Core Audio cog not loaded. Use `[p]load audio` first.")
+            # Try to fetch again in case it loaded later
+            self.audio_cog = self.bot.get_cog('Audio') or self.bot.get_cog('audio')
+        if not self.audio_cog:
+            return await ctx.send("⚠️ Core Audio cog not loaded. Use `[p]load audio` first.")("⚠️ Core Audio cog not loaded. Use `[p]load audio` first.")
         # determine URL or search
         if query.startswith('http'):
             url = query
