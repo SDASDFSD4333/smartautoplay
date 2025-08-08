@@ -95,7 +95,7 @@ class SmartAudio(commands.Cog):
                 await ctx.send(f"Connected to voice channel: {channel.name}")
             except Exception as e:
                 log.error(f"Failed to connect to voice channel: {e}")
-                return await ctx.send(f"Could not connect: {e}")
+                return await ctx.send(f"Error connecting to voice channel: {e}")
         player = self.get_player(ctx.guild)
         # Direct URL playback
         if query.startswith('http'):
