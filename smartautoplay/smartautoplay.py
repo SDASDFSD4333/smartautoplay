@@ -37,7 +37,7 @@ class SmartAudio(commands.Cog):
         except Exception:
             pass
 
-    def get_player(self, guild):
+        def get_player(self, guild):
         player = self.players.get(guild.id)
         if not player:
             player = {
@@ -46,6 +46,20 @@ class SmartAudio(commands.Cog):
             }
             self.players[guild.id] = player
         return player
+
+    async def _idle_loop(self):
+        """Background task: disconnect when alone for >2 minutes."""
+        await self.bot.wait_until_red_ready()
+        while True:
+            for guild in self.bot.guilds:
+                vc = guild.voice_client
+                if vc and vc.is_connected() and len(vc.channel.members) <= 1:
+                    player = self.get_player(guild)
+                    idle = self.bot.loop.time() - player['last_active']
+                    if idle > 120:
+                        await vc.disconnect()
+                        log.info(f"Disconnected from {guild.name} due to inactivity.")
+            await asyncio.sleep(30)
 
         async def _idle_loop(self):
         """Background task: disconnect when alone for >2 minutes."""
