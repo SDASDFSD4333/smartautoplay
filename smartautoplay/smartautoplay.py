@@ -1,8 +1,6 @@
-import asyncio
 import yt_dlp
 from redbot.core import commands, Config
 from redbot.core.bot import Red
-from redbot.core.utils.chat_formatting import bold
 
 class SmartAutoplay(commands.Cog):
     """Smart Autoplay – Plays related tracks like YouTube's Mix"""
@@ -11,7 +9,6 @@ class SmartAutoplay(commands.Cog):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=987654321)
         self.audio_cog = None
-        self.looping = {}
 
     async def red_get_data_for_user(self, *, user_id):
         return {}
@@ -28,13 +25,17 @@ class SmartAutoplay(commands.Cog):
         if not await self.config.guild(guild).autoplay_enabled():
             return
 
-        title = track.title
+        if not track or not hasattr(track, "url"):
+            print("Track has no URL.")
+            return
+
         related_url = await self._get_related_track(track.url)
         if related_url:
             vc = self.audio_cog._get_player(guild)
             await vc.queue_url(related_url, guild=guild)
         else:
-            await guild.system_channel.send("Couldn't find a related track!")
+            if guild.system_channel:
+                await guild.system_channel.send("Couldn't find a related track!")
 
     @commands.group()
     async def smartplay(self, ctx):
@@ -44,39 +45,29 @@ class SmartAutoplay(commands.Cog):
     @smartplay.command()
     async def on(self, ctx):
         await self.config.guild(ctx.guild).autoplay_enabled.set(True)
-        await ctx.send("Autoplay enabled.")
+        await ctx.send("Smart Autoplay enabled.")
 
     @smartplay.command()
     async def off(self, ctx):
         await self.config.guild(ctx.guild).autoplay_enabled.set(False)
-        await ctx.send("Autoplay disabled.")
+        await ctx.send("Smart Autoplay disabled.")
 
-async def _get_related_track(self, url):
-    ydl_opts = {
-        "quiet": True,
-        "extract_flat": True,
-        "skip_download": True,
-    }
-
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
-            info = ydl.extract_info(url, download=False)
-            if "related_videos" in info:
-                for rel in info["related_videos"]:
-                    video_id = rel.get("id")
-                    if video_id:
-                        return f"https://www.youtube.com/watch?v={video_id}"
-        except Exception as e:
-            print(f"[SmartAutoplay Error] {e}")
-            return None
-
+    async def _get_related_track(self, url):
+        """Use yt-dlp to get a related video URL."""
+        ydl_opts = {
+            "quiet": True,
+            "extract_flat": True,
+            "skip_download": True,
+        }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
-                info = ydl.extract_info(query, download=False)
-                if "entries" in info:
-                    for entry in info["entries"]:
-                        return entry["url"]
+                info = ydl.extract_info(url, download=False)
+                if "related_videos" in info:
+                    for rel in info["related_videos"]:
+                        video_id = rel.get("id")
+                        if video_id:
+                            return f"https://www.youtube.com/watch?v={video_id}"
             except Exception as e:
-                print(f"[Autoplay Error] {e}")
+                print(f"[SmartAutoplay Error] {e}")
                 return None
