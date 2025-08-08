@@ -5,7 +5,7 @@ import logging
 import random
 from datetime import timedelta
 from redbot.core import commands, Config
-from redbot.core.utils import tasks
+
 from redbot.core.utils.chat_formatting import humanize_timedelta, box
 
 log = logging.getLogger("red.smartaudio")
@@ -20,7 +20,7 @@ class Track:
 class SmartAudio(commands.Cog):
     """Smart Audio – YouTube autoplay, search, playlists, and reaction controls."""
 
-    def __init__(self, bot):
+        def __init__(self, bot):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=123456789)
         self.config.register_guild(
@@ -28,10 +28,16 @@ class SmartAudio(commands.Cog):
             shuffle=False, volume=0.5, playlists={}
         )
         self.players = {}
-        self.idle_check.start()
+        # start idle disconnect loop
+        self._idle_task = self.bot.loop.create_task(self._idle_loop())
 
-    def cog_unload(self):
-        self.idle_check.cancel()
+
+        def cog_unload(self):
+        try:
+            self._idle_task.cancel()
+        except Exception:
+            pass
+
 
     def get_player(self, guild):
         player = self.players.get(guild.id)
@@ -43,8 +49,20 @@ class SmartAudio(commands.Cog):
             self.players[guild.id] = player
         return player
 
-    @tasks.loop(seconds=30)
-    async def idle_check(self):
+    
+        async def _idle_loop(self):
+        await self.bot.wait_until_red_ready()
+        while True:
+            for guild in self.bot.guilds:
+                vc = guild.voice_client
+                if vc and vc.is_connected() and len(vc.channel.members) <= 1:
+                    player = self.get_player(guild)
+                    idle = self.bot.loop.time() - player['last_active']
+                    if idle > 120:
+                        await vc.disconnect()
+                        log.info(f"Disconnected from {guild.name} due to inactivity.")
+            await asyncio.sleep(30)
+(self):
         for guild in self.bot.guilds:
             vc = guild.voice_client
             if vc and vc.is_connected() and len(vc.channel.members) <= 1:
