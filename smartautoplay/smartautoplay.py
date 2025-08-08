@@ -17,7 +17,7 @@ class Track:
         self.added_by = added_by
 
 class SmartAudio(commands.Cog):
-    """Smart Audio – Delegates to Redbot's Audio cog for playback, adding search, playlists, and autoplay."""
+    """Smart Audio – Delegates to Redbot's Audio cog for playback, with search, playlists, and autoplay."""
 
     def __init__(self, bot):
         self.bot = bot
@@ -26,7 +26,6 @@ class SmartAudio(commands.Cog):
             queue=[], autoplay=True, repeat=False, repeat_one=False,
             shuffle=False, volume=0.5, playlists={}
         )
-        self.players = {}
         self.audio_cog = None
         self.bot.loop.create_task(self._set_audio_cog())
 
@@ -35,171 +34,126 @@ class SmartAudio(commands.Cog):
         self.audio_cog = self.bot.get_cog('Audio')
         if not self.audio_cog:
             log.error('Audio cog not found; SmartAudio will not function.')
-    """Smart Audio – YouTube autoplay, search, playlists, and reaction controls."""
 
-    def __init__(self, bot):
-        self.bot = bot
-        self.config = Config.get_conf(self, identifier=123456789)
-        self.config.register_guild(
-            queue=[], autoplay=True, repeat=False, repeat_one=False,
-            shuffle=False, volume=0.5, playlists={}
-        )
-        self.players = {}
-        # Start idle disconnect loop
-        self._idle_task = self.bot.loop.create_task(self._idle_loop())
-
-    def cog_unload(self):
-        try:
-            self._idle_task.cancel()
-        except Exception:
-            pass
-
-    def get_player(self, guild):
-        player = self.players.get(guild.id)
-        if not player:
-            player = {
-                'vc': None,
-                'queue': [],
-                'current': None,
-                'paused': False,
-                'last_active': self.bot.loop.time()
-            }
-            self.players[guild.id] = player
-        return player
-
-    async def _idle_loop(self):
-        """Disconnect when alone for >5 minutes."""
-        await self.bot.wait_until_red_ready()
-        while True:
-            for guild in self.bot.guilds:
-                vc = guild.voice_client
-                if vc and vc.is_connected():
-                    if len(vc.channel.members) <= 1:
-                        player = self.get_player(guild)
-                        idle = self.bot.loop.time() - player['last_active']
-                        if idle > 300:
-                            await vc.disconnect()
-                            log.info(f"Disconnected from {guild.name} due to inactivity.")
-            await asyncio.sleep(60)
-
-    async def _get_info(self, url):
-        """Fetch video info in thread to avoid blocking."""
-        return await asyncio.to_thread(self._get_info_blocking, url)
-
-    def _get_info_blocking(self, url):
-        ydl_opts = {'format': 'bestaudio/best', 'quiet': True}
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                return ydl.extract_info(url, download=False)
-            except Exception as e:
-                log.error(f"yt-dlp error fetching info: {e}")
-                return None
-
-    async def _search(self, query, limit=6):
-        """Search YouTube entries in thread to avoid blocking."""
-        return await asyncio.to_thread(self._search_blocking, query, limit)
-
-    def _search_blocking(self, query, limit=6):
-        opts = {'quiet': True, 'extract_flat': True, 'skip_download': True}
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            try:
-                info = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
-                return info.get('entries', [])
-            except Exception as e:
-                log.error(f"yt-dlp error searching: {e}")
-                return []
-
-    @commands.command()
-    async def play(self, ctx, *, query):
-        """Play a URL or search YouTube for keywords and select."""
-        if not ctx.author.voice or not ctx.author.voice.channel:
-            return await ctx.send("You need to be in a voice channel to use this command.")
-        channel = ctx.author.voice.channel
-        vc = ctx.guild.voice_client
-        if not vc:
-            try:
-                vc = await channel.connect()
-                await ctx.send(f"Connected to voice channel: {channel.name}")
-            except Exception as e:
-                log.error(f"Failed to connect to voice channel: {e}")
-                return await ctx.send(f"Error connecting to voice channel: {e}")
-        player = self.get_player(ctx.guild)
-        # Direct URL playback
+    @commands.command(name="saplay", aliases=["splay"])
+    async def saplay(self, ctx, *, query):
+        """SmartAudio play command (avoids core Audio play conflict)."""
+        if not self.audio_cog:
+            return await ctx.send("⚠️ Core Audio cog not loaded. Use `[p]load audio` first.")
+        # determine URL or search
         if query.startswith('http'):
-            info = await self._get_info(query)
-            if not info:
-                return await ctx.send("Could not load video.")
-            track = Track(query, info.get('title'), info.get('duration', 0), ctx.author.id)
-            if vc.is_playing():
-                player['queue'].append(track)
-                await ctx.send(f"Queued: [{track.title}]({track.url})")
-            else:
-                await self._play(ctx.guild, track)
-                await ctx.send(f"Now playing: [{track.title}]({track.url})")
-            return
-        # Keyword search flow
-        results = await self._search(query)
-        if not results:
-            return await ctx.send("No results found.")
-        # Build and display search results
-        desc = "\n".join(
-            f"{i+1}. [{e['title']}]({e.get('url') or 'https://youtu.be/' + e['id']})"
-            for i, e in enumerate(results)
-        )
-        embed = discord.Embed(
-            title="Search Results",
-            description=desc,
-            color=discord.Color.blurple()
-        )
-        msg = await ctx.send(embed=embed)
-        emojis = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣']
-        for emj in emojis:
-            await msg.add_reaction(emj)
-        def check(r, u):
-            return u == ctx.author and r.message.id == msg.id and str(r.emoji) in emojis
-        try:
-            reaction, _ = await self.bot.wait_for('reaction_add', check=check, timeout=30)
-            idx = emojis.index(str(reaction.emoji))
-            sel = results[idx]
-            url = sel.get('url') or f"https://youtu.be/{sel['id']}"
-            info = await self._get_info(url)
-            track = Track(url, info.get('title'), info.get('duration', 0), ctx.author.id)
-            if vc.is_playing():
-                player['queue'].append(track)
-                await ctx.send(f"Queued: [{track.title}]({track.url})")
-            else:
-                await self._play(ctx.guild, track)
-                await ctx.send(f"Now playing: [{track.title}]({track.url})")
-        except asyncio.TimeoutError:
-            await ctx.send("Selection timed out.")
-
-    async def _play(self, guild, track):
-        vc = guild.voice_client
-        if not vc:
-            return
-        source = discord.FFmpegPCMAudio(track.url)
-        vol = await self.config.guild(guild).volume()
-        vc.source = discord.PCMVolumeTransformer(source, volume=vol)
-        vc.play(vc.source, after=lambda e: asyncio.create_task(self._after(guild)))
-        player = self.get_player(guild)
-        player['current'] = track
-        player['last_active'] = self.bot.loop.time()
-
-    async def _after(self, guild):
-        player = self.get_player(guild)
-        queue = player['queue']
-        rep = await self.config.guild(guild).repeat()
-        one = await self.config.guild(guild).repeat_one()
-        if one and player['current']:
-            await self._play(guild, player['current'])
-            return
-        if rep and player['current']:
-            queue.append(player['current'])
-        if queue:
-            nxt = queue.pop(0)
-            await self._play(guild, nxt)
+            url = query
         else:
-            player['current'] = None
+            entries = await asyncio.to_thread(self._search_blocking, query, 6)
+            if not entries:
+                return await ctx.send("🔍 No results found.")
+            desc = "\n".join(
+                f"{i+1}. [{e['title']}]({e.get('url') or 'https://youtu.be/'+e['id']})"
+                for i, e in enumerate(entries)
+            )
+            embed = discord.Embed(title="Search Results", description=desc)
+            msg = await ctx.send(embed=embed)
+            emojis = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣']
+            for em in emojis: await msg.add_reaction(em)
+            def check(r,u): return u==ctx.author and r.message.id==msg.id and str(r.emoji) in emojis
+            try:
+                r,_ = await self.bot.wait_for('reaction_add', check=check, timeout=30)
+                url = entries[emojis.index(str(r.emoji))].get('url') or f"https://youtu.be/{entries[emojis.index(str(r.emoji))]['id']}"
+            except asyncio.TimeoutError:
+                return await ctx.send("⏲️ Selection timed out.")
+        player = self.audio_cog._get_player(ctx.guild)
+        await player.queue_url(url, guild=ctx.guild)
+        await ctx.send(f"✅ Queued: <{url}>")
+
+    @commands.command(name="sapause")
+    async def sapause(self, ctx):
+        """SmartAudio pause playback via core Audio cog."""
+        if self.audio_cog:
+            player = self.audio_cog._get_player(ctx.guild)
+            await player.pause()
+            await ctx.send("⏸️ Paused.")
+
+    @commands.command(name="saresume")
+    async def saresume(self, ctx):
+        """SmartAudio resume playback via core Audio cog."""
+        if self.audio_cog:
+            player = self.audio_cog._get_player(ctx.guild)
+            await player.resume()
+            await ctx.send("▶️ Resumed.")
+
+    @commands.command(name="sastop")
+    async def sastop(self, ctx):
+        """SmartAudio stop playback via core Audio cog."""
+        if self.audio_cog:
+            player = self.audio_cog._get_player(ctx.guild)
+            await player.stop()
+            await ctx.send("⏹️ Stopped.")
+
+    @commands.command(name="savolume")
+    async def savolume(self, ctx, level: float):
+        """SmartAudio set volume via core Audio cog."""
+        level = max(0.0, min(1.0, level))
+        await self.config.guild(ctx.guild).volume.set(level)
+        await ctx.send(f"🔈 Volume set to {int(level*100)}%.")
+
+    @commands.command(name="sal!oop", aliases=["saloop"])
+    async def saloop(self, ctx):
+        """SmartAudio toggle repeat one song."""
+        cur = await self.config.guild(ctx.guild).repeat_one()
+        await self.config.guild(ctx.guild).repeat_one.set(not cur)
+        await ctx.send(f"🔂 Repeat one: {'on' if not cur else 'off'}")
+
+    @commands.command(name="sarepeatall")
+    async def sarepeatall(self, ctx):
+        """SmartAudio toggle repeat all queue."""
+        cur = await self.config.guild(ctx.guild).repeat()
+        await self.config.guild(ctx.guild).repeat.set(not cur)
+        await ctx.send(f"🔁 Repeat all: {'on' if not cur else 'off'}")
+
+    @commands.command(name="sashuffle")
+    async def sashuffle(self, ctx):
+        """SmartAudio shuffle queue."""
+        player = self.audio_cog._get_player(ctx.guild)
+        queue = player.queue
+        random.shuffle(queue)
+        await ctx.send("🔀 Queue shuffled.")
+
+    @commands.group(name="saplaylist", invoke_without_command=True)
+    async def saplaylist(self, ctx):
+        """SmartAudio playlist management."""
+        await ctx.send_help('saplaylist')
+
+    @saplaylist.command(name="create")
+    async def saplaylist_create(self, ctx, name: str):
+        pls = await self.config.guild(ctx.guild).playlists()
+        if name in pls:
+            return await ctx.send("❌ Playlist exists.")
+        pls[name] = []
+        await self.config.guild(ctx.guild).playlists.set(pls)
+        await ctx.send(f"✅ Created `{name}`.")
+
+    @saplaylist.command(name="add")
+    async def saplaylist_add(self, ctx, name: str, url: str):
+        pls = await self.config.guild(ctx.guild).playlists()
+        if name not in pls:
+            return await ctx.send("❌ No such playlist.")
+        info = await asyncio.to_thread(self._get_info_blocking, url)
+        if not info:
+            return await ctx.send("⚠️ Could not fetch video info.")
+        pls[name].append({'url':url,'title':info['title'],'duration':info.get('duration',0)})
+        await self.config.guild(ctx.guild).playlists.set(pls)
+        await ctx.send(f"✅ Added to `{name}`: {info['title']}")
+
+    @saplaylist.command(name="show")
+    async def saplaylist_show(self, ctx, name: str):
+        pls = await self.config.guild(ctx.guild).playlists()
+        if name not in pls:
+            return await ctx.send("❌ No such playlist.")
+        pl = pls[name]
+        if not pl:
+            return await ctx.send("(empty)")
+        lines = [f"{i+1}. [{t['title']}]({t['url']}) ({humanize_timedelta(timedelta(seconds=t['duration']))})" for i,t in enumerate(pl)]
+        await ctx.send(box("\n".join(lines)))
 
 async def setup(bot):
     await bot.add_cog(SmartAudio(bot))
