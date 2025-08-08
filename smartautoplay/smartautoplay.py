@@ -25,11 +25,12 @@ class SmartAutoplay(commands.Cog):
         if not await self.config.guild(guild).autoplay_enabled():
             return
 
-        if not track or not hasattr(track, "url"):
-            print("Track has no URL.")
+        track_url = getattr(track, "url", None) or track.info.get("url")
+        if not track_url:
+            print("Could not determine track URL.")
             return
 
-        related_url = await self._get_related_track(track.url)
+        related_url = await self._get_related_track(track_url)
         if related_url:
             vc = self.audio_cog._get_player(guild)
             await vc.queue_url(related_url, guild=guild)
@@ -52,28 +53,28 @@ class SmartAutoplay(commands.Cog):
         await self.config.guild(ctx.guild).autoplay_enabled.set(False)
         await ctx.send("Smart Autoplay disabled.")
 
-  async def _get_related_track(self, url):
-    """Use yt-dlp to get a related video URL."""
-    ydl_opts = {
-        "quiet": True,
-        "extract_flat": True,
-        "skip_download": True,
-    }
+    async def _get_related_track(self, url):
+        """Use yt-dlp to get a related video URL."""
+        ydl_opts = {
+            "quiet": True,
+            "extract_flat": True,
+            "skip_download": True,
+        }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
-            print(f"Fetching related for: {url}")
-            info = ydl.extract_info(url, download=False)
-            print(f"Fetched info: {info.keys()}")
-            if "related_videos" in info:
-                print(f"Found {len(info['related_videos'])} related videos")
-                for rel in info["related_videos"]:
-                    video_id = rel.get("id")
-                    if video_id:
-                        return f"https://www.youtube.com/watch?v={video_id}"
-                print("No usable related videos found.")
-            else:
-                print("No related_videos key found.")
-        except Exception as e:
-            print(f"[SmartAutoplay Error] {e}")
-    return None
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                print(f"Fetching related for: {url}")
+                info = ydl.extract_info(url, download=False)
+                print(f"Fetched info keys: {info.keys()}")
+                if "related_videos" in info:
+                    print(f"Found {len(info['related_videos'])} related videos")
+                    for rel in info["related_videos"]:
+                        video_id = rel.get("id")
+                        if video_id:
+                            return f"https://www.youtube.com/watch?v={video_id}"
+                    print("No usable related videos found.")
+                else:
+                    print("No related_videos key found.")
+            except Exception as e:
+                print(f"[SmartAutoplay Error] {e}")
+        return None
