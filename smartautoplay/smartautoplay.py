@@ -117,6 +117,7 @@ class SmartAudio(commands.Cog):
         if not vc:
             return await ctx.send("Join a voice channel first.")
         player = self.get_player(ctx.guild)
+        # Direct URL play
         if query.startswith('http'):
             info = await self._get_info(query)
             if not info:
@@ -129,14 +130,13 @@ class SmartAudio(commands.Cog):
                 await self._play(ctx.guild, track)
                 await ctx.send(f"Now playing: [{track.title}]({track.url})")
             return
+        # Search and reaction selection
         entries = await self._search(query)
-                if not entries:
+        if not entries:
             return await ctx.send("No results found.")
-
-        # Build a newline-joined list of results
-        desc = "
-".join(
-            f"{i+1}. [{e['title']}]({e.get('url') or 'https://youtu.be/'+e['id']})"  
+        # Correctly join with newline
+        desc = "\n".join(
+            f"{i+1}. [{e['title']}]({e.get('url') or 'https://youtu.be/' + e['id']})"
             for i, e in enumerate(entries)
         )
         embed = discord.Embed(
@@ -145,13 +145,11 @@ class SmartAudio(commands.Cog):
             color=discord.Color.blurple()
         )
         msg = await ctx.send(embed=embed)
-        emojis = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣']
+        emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣']
         for emj in emojis:
             await msg.add_reaction(emj)
-
         def check(r, u):
             return u == ctx.author and r.message.id == msg.id and str(r.emoji) in emojis
-
         try:
             r, _ = await self.bot.wait_for('reaction_add', check=check, timeout=30)
             idx = emojis.index(str(r.emoji))
@@ -166,7 +164,6 @@ class SmartAudio(commands.Cog):
                 await self._play(ctx.guild, track)
                 await ctx.send(f"Now playing: [{track.title}]({track.url})")
         except asyncio.TimeoutError:
-            return await ctx.send("Selection timed out.")
             return await ctx.send("Selection timed out.")
 
     @commands.command()
@@ -227,3 +224,112 @@ class SmartAudio(commands.Cog):
     @commands.command()
     async def loadqueue(self, ctx):
         raw = await self.config.guild(ctx.guild).queue()
+        player = self.get_player(ctx.guild)
+        player['queue'] = [Track(d['url'], d['title'], d['duration'], d.get('added_by')) for d in raw]
+        await ctx.send(f"Loaded {len(player['queue'])} tracks.")
+
+    @commands.group(invoke_without_command=True)
+    async def playlist(self, ctx):
+        "Manage playlists. Use subcommands."
+        await ctx.send_help('playlist')
+
+    @playlist.command()
+    async def create(self, ctx, name: str):
+        pls = await self.config.guild(ctx.guild).playlists()
+        if name in pls:
+            return await ctx.send("Playlist already exists.")
+        pls[name] = []
+        await self.config.guild(ctx.guild).playlists.set(pls)
+        await ctx.send(f"Created playlist `{name}`.")
+
+    @playlist.command()
+    async def add(self, ctx, name: str, url: str):
+        pls = await self.config.guild(ctx.guild).playlists()
+        if name not in pls:
+            return await ctx.send("No such playlist.")
+        info = await self._get_info(url)
+        if not info:
+            return await ctx.send("Could not fetch video info.")
+        entry = {'url': url, 'title': info['title'], 'duration': info.get('duration', 0)}
+        pls[name].append(entry)
+        await self.config.guild(ctx.guild).playlists.set(pls)
+        await ctx.send(f"Added to `{name}`: {entry['title']}")
+
+    @playlist.command()
+    async def show(self, ctx, name: str):
+        pls = await self.config.guild(ctx.guild).playlists()
+        if name not in pls:
+            return await ctx.send("No such playlist.")
+        pl = pls[name]
+        if not pl:
+            return await ctx.send("Playlist is empty.")
+        lines = [
+            f"{i+1}. [{t['title']}]({t['url']}) ({humanize_timedelta(timedelta(seconds=t['duration']))})"
+            for i, t in enumerate(pl)
+        ]
+        desc = "\n".join(lines)
+        await ctx.send(embed=discord.Embed(title=f"Playlist: {name}", description=desc, color=discord.Color.blurple()))
+
+    @playlist.command()
+    async def play(self, ctx, name: str):
+        pls = await self.config.guild(ctx.guild).playlists()
+        if name not in pls:
+            return await ctx.send("No such playlist.")
+        pl = pls[name]
+        if not pl:
+            return await ctx.send("Playlist is empty.")
+        player = self.get_player(ctx.guild)
+        for t in pl:
+            player['queue'].append(Track(t['url'], t['title'], t['duration']))
+        await ctx.send(f"Enqueued {len(pl)} tracks from `{name}`.")
+
+    @playlist.command()
+    async def remove(self, ctx, name: str, idx: int):
+        pls = await self.config.guild(ctx.guild).playlists()
+        if name not in pls:
+            return await ctx.send("No such playlist.")
+        try:
+            rem = pls[name].pop(idx-1)
+        except Exception:
+            return await ctx.send("Invalid index.")
+        await self.config.guild(ctx.guild).playlists.set(pls)
+        await ctx.send(f"Removed from `{name}`: {rem['title']}")
+
+    @playlist.command()
+    async def clear(self, ctx, name: str):
+        pls = await self.config.guild(ctx.guild).playlists()
+        if name not in pls:
+            return await ctx.send("No such playlist.")
+        pls[name] = []
+        await self.config.guild(ctx.guild).playlists.set(pls)
+        await ctx.send(f"Cleared playlist `{name}`.")
+
+    @playlist.command()
+    async def rename(self, ctx, old: str, new: str):
+        pls = await self.config.guild(ctx.guild).playlists()
+        if old not in pls:
+            return await ctx.send("No such playlist.")
+        if new in pls:
+            return await ctx.send("New name already exists.")
+        pls[new] = pls.pop(old)
+        await self.config.guild(ctx.guild).playlists.set(pls)
+        await ctx.send(f"Renamed `{old}` to `{new}`.")
+
+    @commands.command()
+    async def audioguide(self, ctx):
+        guide = (
+            "**SmartAudio Bot Guide**\n"
+            "!play <url|keywords> — Play or search YouTube\n"
+            "!pause/resume/stop — Playback control\n"
+            "!loop — Repeat current track\n"
+            "!repeatall — Repeat entire queue\n"
+            "!shuffle — Shuffle queue\n"
+            "!savequeue/loadqueue — Persist queue\n"
+            "!queue — Interactive queue pages\n"
+            "!playlist create/add/show/play/remove/clear/rename — Manage playlists\n"
+            "Reactions: ⬅️➡️ page, 🗑️ remove, 1️⃣–7️⃣ add to playlists 1–7\n"
+        )
+        await ctx.send(box(guide, lang="ini"))
+
+async def setup(bot):
+    await bot.add_cog(SmartAudio(bot))
