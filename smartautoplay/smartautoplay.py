@@ -45,29 +45,9 @@ class SmartAudio(commands.Cog):
                 'paused': False, 'last_active': self.bot.loop.time()
             }
             self.players[guild.id] = player
-        return player    async def _idle_loop(self):(self):
-        await self.bot.wait_until_red_ready()
-        while True:
-            for guild in self.bot.guilds:
-                vc = guild.voice_client
-                if vc and vc.is_connected() and len(vc.channel.members) <= 1:
-                    player = self.get_player(guild)
-                    idle = self.bot.loop.time() - player['last_active']
-                    if idle > 120:
-                        await vc.disconnect()
-                        log.info(f"Disconnected from {guild.name} due to inactivity.")
-            await asyncio.sleep(30)
-(self):
-        for guild in self.bot.guilds:
-            vc = guild.voice_client
-            if vc and vc.is_connected() and len(vc.channel.members) <= 1:
-                player = self.get_player(guild)
-                idle = self.bot.loop.time() - player['last_active']
-                if idle > 120:
-                    await vc.disconnect()
-                    log.info(f"Disconnected from {guild.name} due to inactivity.")
+        return player
 
-    async def _get_info(self, url):
+    async def _idle_loop(self):(self, url):
         ydl_opts = {'format': 'bestaudio/best', 'quiet': True}
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
