@@ -128,4 +128,10 @@ class SmartAudio(commands.Cog):
     f"{i+1}. [{entry['title']}]({entry.get('url') or 'https://youtu.be/'+entry['id']})"
     for i, entry in enumerate(entries)
 )
+ or 'https://youtu.be/'+entry['id']})"
+    for i, entry in enumerate(entries)
+)
+ or 'https://youtu.be/'+entry['id']})"
+    for i, entry in enumerate(entries)
+)
 )
