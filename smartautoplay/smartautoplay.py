@@ -25,14 +25,20 @@ class SmartAutoplay(commands.Cog):
         if not await self.config.guild(guild).autoplay_enabled():
             return
 
-        track_url = getattr(track, "url", None) or track.info.get("url")
+        print(f"Track object: {track}")
+        print(f"Track info: {getattr(track, 'info', None)}")
+
+        track_url = getattr(track, "url", None) or (getattr(track, "info", {}) or {}).get("url")
         if not track_url:
-            print("Could not determine track URL.")
+            print(f"[SmartAutoplay] Could not determine track URL for track: {track}")
             return
 
         related_url = await self._get_related_track(track_url)
         if related_url:
             vc = self.audio_cog._get_player(guild)
+            if not vc:
+                print("[SmartAutoplay] No audio player found for guild.")
+                return
             await vc.queue_url(related_url, guild=guild)
         else:
             if guild.system_channel:
@@ -63,18 +69,16 @@ class SmartAutoplay(commands.Cog):
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
-                print(f"Fetching related for: {url}")
+                print(f"[SmartAutoplay] Fetching related for: {url}")
                 info = ydl.extract_info(url, download=False)
-                print(f"Fetched info keys: {info.keys()}")
-                if "related_videos" in info:
-                    print(f"Found {len(info['related_videos'])} related videos")
-                    for rel in info["related_videos"]:
-                        video_id = rel.get("id")
-                        if video_id:
-                            return f"https://www.youtube.com/watch?v={video_id}"
-                    print("No usable related videos found.")
-                else:
-                    print("No related_videos key found.")
+                print(f"[SmartAutoplay] Fetched info keys: {list(info.keys())}")
+                related = info.get("related_videos", [])
+                print(f"[SmartAutoplay] Found {len(related)} related videos")
+                for rel in related:
+                    video_id = rel.get("id")
+                    if video_id:
+                        return f"https://www.youtube.com/watch?v={video_id}"
+                print("[SmartAutoplay] No usable related videos found.")
             except Exception as e:
                 print(f"[SmartAutoplay Error] {e}")
         return None
