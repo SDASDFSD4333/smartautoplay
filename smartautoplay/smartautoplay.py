@@ -272,6 +272,9 @@ class SmartAudio(commands.Cog):
         for emoji in ["⬅️", "➡️", "🗑️"]:
             await msg.add_reaction(emoji)
 
+    @playlist.command() ["⬅️", "➡️", "🗑️"]:
+            await msg.add_reaction(emoji)
+
     @playlist.command()()
     async def play(self, ctx, name: str):
         pls = await self.config.guild(ctx.guild).playlists()
