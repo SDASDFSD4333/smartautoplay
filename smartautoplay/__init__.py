@@ -1,4 +1,4 @@
-from .smartautoplay import SmartAutoplay
+from .smartautoplay import SmartAudio
 
 async def setup(bot):
-    await bot.add_cog(SmartAutoplay(bot))
+    await bot.add_cog(SmartAudio(bot))
