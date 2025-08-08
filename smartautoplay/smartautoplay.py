@@ -5,7 +5,7 @@ import logging
 import random
 from datetime import timedelta
 from redbot.core import commands, Config
-from redbot.core.tasks import loop
+from redbot.core.utils import tasks
 from redbot.core.utils.chat_formatting import humanize_timedelta
 
 log = logging.getLogger("red.smartaudio")
@@ -50,7 +50,7 @@ class SmartAudio(commands.Cog):
             }
         return self.players[guild.id]
 
-    @loop(seconds=30)
+    @tasks.loop(seconds=30)
     async def idle_check(self):
         for guild in self.bot.guilds:
             vc = guild.voice_client
